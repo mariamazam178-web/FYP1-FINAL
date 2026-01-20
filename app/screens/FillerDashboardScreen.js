@@ -25,6 +25,10 @@ const USER_PROFILES_URL = `${SUPABASE_URL}/rest/v1/user_profiles`;
 const SURVEY_RESPONSES_URL = `${SUPABASE_URL}/rest/v1/survey_responses`;
 const SURVEYS_URL = `${SUPABASE_URL}/rest/v1/surveys`;
 
+// ✅ FIXED: Use multiple keys for better tracking
+const GREEN_CARD_SHOWN_KEY = '@filler_has_shown_green_card';
+const PROFILE_CHECKED_KEY = '@filler_profile_complete_checked';
+
 const calculateAge = (dateOfBirth) => {
     if (!dateOfBirth) return null;
     
@@ -222,39 +226,45 @@ const PaymentSuccessModal = ({ visible, onClose, amount }) => {
     );
 };
 
+// ✅ UPDATED: Green Profile Card Component with close button
 const GreenProfileCompletionCard = ({ 
     isProfileComplete, 
     showGreenCard,
-    navigation 
+    navigation,
+    onManualClose
 }) => {
     if (!isProfileComplete || !showGreenCard) {
         return null;
     }
 
     return (
-        <TouchableOpacity 
-            style={[styles.card, styles.greenProfileCard]}
-            onPress={() => navigation.navigate('ProfileViewScreen')}
-            activeOpacity={0.8}
-        >
+        <View style={[styles.card, styles.greenProfileCard]}>
             <View style={styles.cardHeader}>
                 <LinearGradient
                     colors={['#38C172', '#69e09d']}
                     style={styles.iconGradientContainer}
                 >
-                    <MaterialIcons name="lock" size={28} color="#fff" />
+                    <MaterialIcons name="lock-open" size={28} color="#fff" />
                 </LinearGradient>
                 
                 <View style={styles.cardContent}>
-                    <Text style={styles.greenCardTitle}>Profile Complete</Text>
+                    <Text style={styles.greenCardTitle}>Profile Verified ✅</Text>
                     <Text style={styles.greenCardDescription}>
-                        Your profile is now locked and verified
+                        Your profile is complete and verified. You can now access all surveys!
                     </Text>
+                    
                 </View>
                 
-                <MaterialIcons name="check-circle" size={24} color="#38C172" />
+                {/* ✅ Manual close button */}
+                <TouchableOpacity 
+                    onPress={onManualClose}
+                    style={styles.closeButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                    <MaterialIcons name="close" size={20} color="#38C172" />
+                </TouchableOpacity>
             </View>
-        </TouchableOpacity>
+        </View>
     );
 };
 
@@ -367,9 +377,7 @@ const calculateSurveyPayment = (survey) => {
     }
 };
 
-// ✅ SIMPLE Survey Card without extra badges and messages
 // ✅ UPDATED: Simple Survey Card with only category badge and reward amount
-// ✅ UPDATED: Two separate badges side-by-side
 const AvailableSurveyCard = ({ 
     survey, 
     onPress, 
@@ -517,6 +525,7 @@ const AvailableSurveyCard = ({
         </TouchableOpacity>
     );
 };
+
 const TabItem = ({ iconName, label, isCurrent, onPress }) => (
     <TouchableOpacity style={styles.tabItem} onPress={onPress}>
         <MaterialCommunityIcons 
@@ -554,50 +563,86 @@ const FillerDashboardScreen = ({ navigation, route }) => {
     const [showPaymentSuccessModal, setShowPaymentSuccessModal] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState(0);
 
-    useEffect(() => {
-        checkGreenCardStatus();
-        return () => {
+    // ✅ UPDATED: Check green card status - SIMPLIFIED
+    const checkGreenCardStatus = useCallback(async () => {
+        try {
+            const hasShown = await AsyncStorage.getItem(GREEN_CARD_SHOWN_KEY);
+            console.log('🟢 Green card shown status:', hasShown);
+            
+            if (hasShown === 'true') {
+                setHasShownGreenCard(true);
+                setShowGreenProfileCard(false); // Always hide if already shown
+                console.log('🟢 Green card already shown, keeping hidden');
+                return true;
+            }
+            
+            setHasShownGreenCard(false);
+            console.log('🟢 Green card not shown yet');
+            return false;
+        } catch (error) {
+            console.error('Error checking green card status:', error);
+            setHasShownGreenCard(false);
+            return false;
+        }
+    }, []);
+
+    // ✅ UPDATED: Show green card - WITH PROPER CHECKS
+    const showTemporaryGreenCard = useCallback(async () => {
+        try {
+            console.log('🟢 Attempting to show green card...');
+            
+            // Double-check AsyncStorage before showing
+            const hasShown = await AsyncStorage.getItem(GREEN_CARD_SHOWN_KEY);
+            
+            if (hasShown === 'true') {
+                console.log('🟢 Green card already shown (double-check), skipping');
+                setHasShownGreenCard(true);
+                setShowGreenProfileCard(false);
+                return;
+            }
+
+            console.log('🟢 ✅ Showing green card for 2 minutes');
+            setShowGreenProfileCard(true);
+            
+            // ✅ Mark as shown in AsyncStorage IMMEDIATELY
+            await AsyncStorage.setItem(GREEN_CARD_SHOWN_KEY, 'true');
+            setHasShownGreenCard(true);
+            
+            // ✅ Also mark that we've checked profile completeness
+            await AsyncStorage.setItem(PROFILE_CHECKED_KEY, 'true');
+            
+            // Clear existing timer if any
             if (greenCardTimer) {
                 clearTimeout(greenCardTimer);
             }
-        };
+            
+            // Set new timer for 2 minutes
+            const timer = setTimeout(() => {
+                console.log('🟢 Auto-hiding green card after 2 minutes');
+                setShowGreenProfileCard(false);
+            }, 120000);
+            
+            setGreenCardTimer(timer);
+        } catch (error) {
+            console.error('Error in showTemporaryGreenCard:', error);
+        }
+    }, [greenCardTimer]);
+
+    // ✅ NEW: Check if profile is complete
+    const checkProfileCompleteness = useCallback(async (profile) => {
+        const requiredFieldsForFiller = [
+            'full_name', 'gender', 'date_of_birth', 'marital_status', 
+            'mobile_number', 'cnic_number', 'education', 'profession'
+        ];
+        
+        const filledFields = requiredFieldsForFiller.filter(field => 
+            profile[field] && profile[field].toString().trim() !== ''
+        );
+        
+        return filledFields.length === requiredFieldsForFiller.length;
     }, []);
 
-    const checkGreenCardStatus = async () => {
-        try {
-            const shown = await AsyncStorage.getItem('@has_shown_green_card');
-            if (shown === 'true') {
-                setHasShownGreenCard(true);
-            }
-        } catch (error) {
-            console.error('Error checking green card status:', error);
-        }
-    };
-
-    const markGreenCardAsShown = async () => {
-        try {
-            await AsyncStorage.setItem('@has_shown_green_card', 'true');
-            setHasShownGreenCard(true);
-        } catch (error) {
-            console.error('Error saving green card status:', error);
-        }
-    };
-
-    const showTemporaryGreenCard = () => {
-        if (hasShownGreenCard) {
-            return;
-        }
-
-        setShowGreenProfileCard(true);
-        markGreenCardAsShown();
-        
-        const timer = setTimeout(() => {
-            setShowGreenProfileCard(false);
-        }, 120000);
-        
-        setGreenCardTimer(timer);
-    };
-
+    // ✅ UPDATED: fetchUserProfile - SIMPLIFIED
     const fetchUserProfile = useCallback(async () => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -642,21 +687,28 @@ const FillerDashboardScreen = ({ navigation, route }) => {
                 
                 const age = calculateAge(profile.date_of_birth);
                 
-                // Check profile completion for FILLER
-                const requiredFieldsForFiller = [
-                    'full_name', 'gender', 'date_of_birth', 'marital_status', 
-                    'mobile_number', 'cnic_number', 'education', 'profession'
-                ];
-                
-                const filledFields = requiredFieldsForFiller.filter(field => 
-                    profile[field] && profile[field].toString().trim() !== ''
-                );
-                
-                const isProfileComplete = filledFields.length === requiredFieldsForFiller.length;
+                // ✅ Check profile completeness
+                const isProfileComplete = await checkProfileCompleteness(profile);
                 setIsProfileComplete(isProfileComplete);
                 
-                if (isProfileComplete && !profile.has_received_completion_bonus) {
-                    showTemporaryGreenCard();
+                // ✅ Only show green card if ALL conditions are met
+                if (isProfileComplete) {
+                    const userRole = session.user.user_metadata?.user_role || 'filler';
+                    const hasShown = await AsyncStorage.getItem(GREEN_CARD_SHOWN_KEY);
+                    const profileChecked = await AsyncStorage.getItem(PROFILE_CHECKED_KEY);
+                    
+                    console.log('🟢 Conditions for green card:', {
+                        isProfileComplete,
+                        userRole,
+                        hasShown,
+                        profileChecked
+                    });
+                    
+                    // Only show if: profile complete + filler role + not shown before + not checked before
+                    if (userRole === 'filler' && hasShown !== 'true' && profileChecked !== 'true') {
+                        console.log('🟢 All conditions met, will show green card');
+                        // Don't call showTemporaryGreenCard here - let useEffect handle it
+                    }
                 }
                 
                 // Prepare user profile data for filtering
@@ -671,7 +723,7 @@ const FillerDashboardScreen = ({ navigation, route }) => {
                 };
                 
                 setUserProfile(userProfileData);
-                return userProfileData;
+                return { profile: userProfileData, isComplete: isProfileComplete };
             }
             
             return null;
@@ -680,7 +732,63 @@ const FillerDashboardScreen = ({ navigation, route }) => {
             console.error('❌ Error fetching user profile:', error);
             return null;
         }
-    }, []);
+    }, [checkProfileCompleteness]);
+
+    // ✅ NEW: Check and show green card if needed
+    const checkAndShowGreenCard = useCallback(async () => {
+        try {
+            console.log('🟢 Checking if green card should be shown...');
+            
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+            
+            const userRole = session.user.user_metadata?.user_role || 'filler';
+            if (userRole !== 'filler') return;
+            
+            // Check both keys
+            const hasShown = await AsyncStorage.getItem(GREEN_CARD_SHOWN_KEY);
+            const profileChecked = await AsyncStorage.getItem(PROFILE_CHECKED_KEY);
+            
+            console.log('🟢 Status check:', { hasShown, profileChecked });
+            
+            // If already shown or already checked, skip
+            if (hasShown === 'true' || profileChecked === 'true') {
+                console.log('🟢 Already shown or checked, skipping');
+                return;
+            }
+            
+            // Fetch profile to check completeness
+            const response = await fetch(
+                `${USER_PROFILES_URL}?user_id=eq.${session.user.id}&select=*`,
+                {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+            
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            if (data && data.length > 0) {
+                const profile = data[0];
+                const isProfileComplete = await checkProfileCompleteness(profile);
+                
+                if (isProfileComplete) {
+                    console.log('🟢 Profile complete, showing green card');
+                    await showTemporaryGreenCard();
+                } else {
+                    console.log('🟢 Profile not complete yet');
+                    // Mark as checked anyway so we don't check again
+                    await AsyncStorage.setItem(PROFILE_CHECKED_KEY, 'true');
+                }
+            }
+        } catch (error) {
+            console.error('Error checking green card:', error);
+        }
+    }, [checkProfileCompleteness, showTemporaryGreenCard]);
 
     const fetchCompletedSurveys = useCallback(async () => {
         try {
@@ -849,13 +957,11 @@ const FillerDashboardScreen = ({ navigation, route }) => {
             const walletBal = await fetchWalletBalance();
             setWalletBalance(walletBal);
 
-            const [userProfileData, completedSurveysResult] = await Promise.all([
-                fetchUserProfile(),
-                fetchCompletedSurveys()
-            ]);
+            const userProfileResult = await fetchUserProfile();
+            const completedSurveysResult = await fetchCompletedSurveys();
             
-            if (userProfileData) {
-                const availableSurveysData = await fetchAvailableSurveys(userProfileData);
+            if (userProfileResult) {
+                const availableSurveysData = await fetchAvailableSurveys(userProfileResult.profile);
                 setAvailableSurveys(availableSurveysData);
             }
             
@@ -871,9 +977,38 @@ const FillerDashboardScreen = ({ navigation, route }) => {
         }
     }, [fetchUserProfile, fetchCompletedSurveys, fetchAvailableSurveys, fetchWalletBalance]);
 
+    // ✅ SINGLE useEffect for initialization
     useEffect(() => {
-        loadDashboardData();
-    }, [loadDashboardData]);
+        console.log('🟢 FillerDashboard mounted');
+        
+        const initializeDashboard = async () => {
+            try {
+                // 1. First check green card status
+                await checkGreenCardStatus();
+                
+                // 2. Check and show green card if needed
+                await checkAndShowGreenCard();
+                
+                // 3. Load dashboard data
+                await loadDashboardData();
+                
+                console.log('🟢 Dashboard initialization complete');
+            } catch (error) {
+                console.error('Error initializing dashboard:', error);
+            }
+        };
+        
+        initializeDashboard();
+        
+        // Cleanup timer
+        return () => {
+            console.log('🟢 FillerDashboard unmounting');
+            if (greenCardTimer) {
+                clearTimeout(greenCardTimer);
+                setGreenCardTimer(null);
+            }
+        };
+    }, []); // Empty dependency array - run only once on mount
 
     // ✅ Handle payment success
     const handlePaymentSuccess = (amount) => {
@@ -965,7 +1100,7 @@ const FillerDashboardScreen = ({ navigation, route }) => {
                 showPaymentSuccess: undefined
             });
         }
-    }, [route.params, navigation, hasShownGreenCard, loadDashboardData]);
+    }, [route.params, navigation, hasShownGreenCard, loadDashboardData, showTemporaryGreenCard]);
 
     const handleSurveyClick = (survey) => {
         if (completedSurveyIds.has(survey.id)) {
@@ -1023,6 +1158,10 @@ const FillerDashboardScreen = ({ navigation, route }) => {
                 isProfileComplete={isProfileComplete}
                 showGreenCard={showGreenProfileCard}
                 navigation={navigation}
+                onManualClose={() => {
+                    console.log('🟢 User manually closed green card');
+                    setShowGreenProfileCard(false);
+                }}
             />
 
             <RegularProfileCard 
@@ -1059,11 +1198,9 @@ const FillerDashboardScreen = ({ navigation, route }) => {
                         </TouchableOpacity>
                     </View>
 
-                    {/* ✅ FIXED: Removed wallet badge from section header */}
                     <View style={styles.sectionHeader}>
                         <MaterialCommunityIcons name="clipboard-check-outline" size={24} color="#FF7E1D" />
                         <Text style={styles.sectionTitle}>{sectionTitleText}</Text>
-                        {/* ❌ REMOVED: <View style={styles.walletBadge}>...</View> */}
                     </View>
                     
                     {listToRender.length > 0 ? (
@@ -1264,22 +1401,6 @@ const styles = StyleSheet.create({
         marginLeft: 10,
        
     },
-    walletBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFF5EC',
-        borderRadius: 15,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderWidth: 1,
-        borderColor: '#FFE0BF',
-    },
-    walletBadgeText: {
-        fontSize: 12,
-        color: '#FF7E1D',
-        fontWeight: '600',
-        marginLeft: 4,
-    },
     tabSwitcher: {
         flexDirection: 'row',
         backgroundColor: '#FFF5EC',
@@ -1377,8 +1498,18 @@ const styles = StyleSheet.create({
     greenCardDescription: {
         fontSize: 14,
         color: '#666',
-        marginBottom: 15,
+        marginBottom: 5,
         lineHeight: 20,
+    },
+    greenCardTimer: {
+        fontSize: 11,
+        color: '#38C172',
+        marginTop: 5,
+        fontStyle: 'italic',
+    },
+    closeButton: {
+        padding: 5,
+        marginLeft: 10,
     },
     incompleteProfileCard: {
         backgroundColor: '#F6B93B24',

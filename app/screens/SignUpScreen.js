@@ -438,7 +438,7 @@ const SignUpScreen = ({ navigation, route }) => {
                     {/* Full Name Input */}
                     <TextInput
                         style={[styles.input, fullNameError && styles.inputError]}
-                        placeholder="Full Name (e.g., John Doe)"
+                        placeholder="Full Name"
                         placeholderTextColor="#999"
                         autoCapitalize="words"
                         value={fullName}

@@ -28,7 +28,7 @@ const PasswordCriteria = ({ meetsRequirement, label }) => {
 };
 
 // Custom TextInput component for better styling
-const CustomTextInput = ({ placeholder, value, onChangeText, secureTextEntry = false, label, showPassword, onTogglePassword }) => (
+const CustomTextInput = ({ placeholder, value, onChangeText, secureTextEntry = false, label, onTogglePassword }) => (
     <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>{label}</Text>
         <View style={styles.passwordInputContainer}>
@@ -38,12 +38,12 @@ const CustomTextInput = ({ placeholder, value, onChangeText, secureTextEntry = f
                 placeholderTextColor="#999"
                 value={value}
                 onChangeText={onChangeText}
-                secureTextEntry={!showPassword}
+                secureTextEntry={secureTextEntry}
                 autoCapitalize="none"
             />
             <TouchableOpacity style={styles.eyeIcon} onPress={onTogglePassword}>
                 <MaterialIcons 
-                    name={showPassword ? "visibility-off" : "visibility"} 
+                    name={secureTextEntry ? "visibility-off" : "visibility"} 
                     size={24} 
                     color="#999" 
                 />
@@ -220,7 +220,6 @@ const ChangePasswordScreen = ({ navigation }) => {
                         value={currentPassword}
                         onChangeText={setCurrentPassword}
                         secureTextEntry={!showCurrentPassword}
-                        showPassword={showCurrentPassword}
                         onTogglePassword={() => setShowCurrentPassword(!showCurrentPassword)}
                     />
 
@@ -230,7 +229,6 @@ const ChangePasswordScreen = ({ navigation }) => {
                         value={newPassword}
                         onChangeText={setNewPassword}
                         secureTextEntry={!showNewPassword}
-                        showPassword={showNewPassword}
                         onTogglePassword={() => setShowNewPassword(!showNewPassword)}
                     />
                     
@@ -258,7 +256,6 @@ const ChangePasswordScreen = ({ navigation }) => {
                         value={confirmPassword}
                         onChangeText={setConfirmPassword}
                         secureTextEntry={!showConfirmPassword}
-                        showPassword={showConfirmPassword}
                         onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
                     />
                 </View>
@@ -378,6 +375,11 @@ const styles = StyleSheet.create({
     },
     eyeIcon: {
         padding: 5,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#E0E0E0',
+        marginTop: 5,
     },
     // Password Criteria Styles (SignUpScreen jaisa)
     criteriaContainer: {
