@@ -27,6 +27,7 @@ import ProfileCompletionScreen from "./app/screens/ProfileCompletionScreen";
 import ContactInfoScreen from "./app/screens/ContactInfoScreen.js";
 import ProfessionalInfoScreen from "./app/screens/ProfessionalInfoScreen";
 import InterestAndHobbiesScreen from "./app/screens/InterestAndHobbiesScreen";
+import EditProfileScreen from './app/screens/EditProfileScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -76,6 +77,7 @@ const AppNavigator = () => {
         <Stack.Screen name="ProfileViewScreen" component={ProfileViewScreen} />
         <Stack.Screen name="ChangePassword" component={ChangePassword} />
         <Stack.Screen name="WalletScreen" component={WalletScreen} />
+        <Stack.Screen name="EditProfileScreen" component={EditProfileScreen}  options={{ headerShown: false }}/>
         
         {/* --- PROFILE COMPLETION FLOW (Steps 1, 2, 3, 4) --- */}
         <Stack.Screen name="ProfileCompletionScreen" component={ProfileCompletionScreen} />

@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage'; 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../../supabaseClient';
 
 const { width, height } = Dimensions.get('window');
 
@@ -111,33 +112,39 @@ const INTEREST_DATA = [
     },
 ];
 
-const SuccessRewardModal = ({ visible, onClose, awardedAmount, navigation, userRole }) => {
+const SuccessRewardModal = ({ visible, onClose, awardedAmount, navigation, userRole, isEditMode }) => {
   const handleOKPress = () => {
     onClose();
     
-    // ✅ FIXED: Navigate to correct dashboard with award info
-    if (userRole === 'creator') {
-      navigation.reset({
-        index: 0,
-        routes: [{ 
-          name: 'CreatorDashboard',
-          params: { 
-            awardedAmount: awardedAmount,
-            showMessage: `₹${awardedAmount} added to your wallet!`
-          }
-        }],
+    if (isEditMode) {
+      navigation.navigate('ProfileViewScreen', { 
+        refreshedProfile: true,
+        showSuccessMessage: 'Interests updated successfully!'
       });
     } else {
-      navigation.reset({
-        index: 0,
-        routes: [{ 
-          name: 'FillerDashboard',
-          params: { 
-            awardedAmount: awardedAmount,
-            showSurveyUnlockPopup: true
-          }
-        }],
-      });
+      if (userRole === 'creator') {
+        navigation.reset({
+          index: 0,
+          routes: [{ 
+            name: 'CreatorDashboard',
+            params: { 
+              awardedAmount: awardedAmount,
+              showMessage: `₹${awardedAmount} added to your wallet!`
+            }
+          }],
+        });
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ 
+            name: 'FillerDashboard',
+            params: { 
+              awardedAmount: awardedAmount,
+              showSurveyUnlockPopup: true
+            }
+          }],
+        });
+      }
     }
   };
 
@@ -154,23 +161,23 @@ const SuccessRewardModal = ({ visible, onClose, awardedAmount, navigation, userR
             <MaterialIcons name="check" size={40} color="#fff" />
           </View>
 
-          <Text style={styles.rewardModalTitle}>Profile Complete! 🎉</Text>
+          <Text style={styles.rewardModalTitle}>
+            {isEditMode ? 'Updated Successfully! 🎉' : 'Profile Complete! 🎉'}
+          </Text>
           <Text style={styles.rewardModalMessage}>
-            You have successfully completed your profile!
+            {isEditMode 
+              ? 'Your interests & hobbies have been updated successfully!' 
+              : 'You have successfully completed your profile!'}
           </Text>
           
-          <View style={styles.notificationBox}>
-            <MaterialIcons name="account-balance-wallet" size={20} color="#FF7E1D" />
-            <Text style={styles.notificationText}>
-              PKR {awardedAmount} has been added to your wallet
-            </Text>
-          </View>
-
-          <Text style={styles.additionalMessage}>
-            {userRole === 'creator' 
-              ? 'You can now create and publish surveys!' 
-              : 'You can now participate in surveys and earn more!'}
-          </Text>
+          {!isEditMode && (
+            <View style={styles.notificationBox}>
+              <MaterialIcons name="account-balance-wallet" size={20} color="#FF7E1D" />
+              <Text style={styles.notificationText}>
+                PKR {awardedAmount} has been added to your wallet
+              </Text>
+            </View>
+          )}
 
           <TouchableOpacity onPress={handleOKPress} style={styles.rewardModalButtonContainer}>
             <LinearGradient
@@ -180,7 +187,7 @@ const SuccessRewardModal = ({ visible, onClose, awardedAmount, navigation, userR
               style={styles.rewardModalButtonGradient}
             >
               <Text style={styles.rewardModalButtonText}>
-                {userRole === 'creator' ? 'Go to Creator Dashboard' : 'Go to Filler Dashboard'}
+                {isEditMode ? 'Back to Profile' : (userRole === 'creator' ? 'Go to Creator Dashboard' : 'Go to Filler Dashboard')}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -251,46 +258,46 @@ const SubCategoryModalComponent = ({ visible, onClose, category, selectedInteres
                     {modalError ? <Text style={styles.modalErrorText}>{modalError}</Text> : null}
 
                     <View style={styles.subCategoryListWrapper}>
-                               <LinearGradient
-                                    colors={['#FFD464', '#FCF3E7']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 0 }}
-                                    style={styles.subCategoryGradientBorderModal}
-                               >
-                                    <View style={styles.subCategoryInnerContentModal}>
-                                                    {category.subCategories.map((sub, index) => {
-                                                        const isSubSelected = tempSelectedSubs.includes(sub);
-                                                        const isDisabled = currentSubCount >= MAX_SUB_CATEGORIES && !isSubSelected;
+                        <LinearGradient
+                            colors={['#FFD464', '#FCF3E7']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.subCategoryGradientBorderModal}
+                        >
+                            <View style={styles.subCategoryInnerContentModal}>
+                                {category.subCategories.map((sub, index) => {
+                                    const isSubSelected = tempSelectedSubs.includes(sub);
+                                    const isDisabled = currentSubCount >= MAX_SUB_CATEGORIES && !isSubSelected;
 
-                                                        return (
-                                                            <TouchableOpacity
-                                                                key={index}
-                                                                style={[
-                                                                    styles.subCategoryItem,
-                                                                    isSubSelected && styles.subCategoryItemSelected,
-                                                                    isDisabled && styles.subCategoryItemDisabled
-                                                                ]}
-                                                                onPress={() => toggleLocalSubInterest(sub)}
-                                                                disabled={isDisabled}
-                                                            >
-                                                                <MaterialIcons
-                                                                    name={isSubSelected ? 'check-circle' : 'radio-button-unchecked'}
-                                                                    size={18}
-                                                                    color={isSubSelected ? '#FFFFFF' : (isDisabled ? '#ccc' : '#999')}
-                                                                    style={{ marginRight: 5 }}
-                                                                />
-                                                                <Text style={[
-                                                                    styles.subCategoryTextModal,
-                                                                    isSubSelected && styles.subCategoryTextSelected,
-                                                                    isDisabled && styles.subCategoryTextDisabled
-                                                                ]}>
-                                                                    {sub}
-                                                                </Text>
-                                                            </TouchableOpacity>
-                                                        );
-                                                    })}
-                                    </View>
-                               </LinearGradient>
+                                    return (
+                                        <TouchableOpacity
+                                            key={index}
+                                            style={[
+                                                styles.subCategoryItem,
+                                                isSubSelected && styles.subCategoryItemSelected,
+                                                isDisabled && styles.subCategoryItemDisabled
+                                            ]}
+                                            onPress={() => toggleLocalSubInterest(sub)}
+                                            disabled={isDisabled}
+                                        >
+                                            <MaterialIcons
+                                                name={isSubSelected ? 'check-circle' : 'radio-button-unchecked'}
+                                                size={18}
+                                                color={isSubSelected ? '#FFFFFF' : (isDisabled ? '#ccc' : '#999')}
+                                                style={{ marginRight: 5 }}
+                                            />
+                                            <Text style={[
+                                                styles.subCategoryTextModal,
+                                                isSubSelected && styles.subCategoryTextSelected,
+                                                isDisabled && styles.subCategoryTextDisabled
+                                            ]}>
+                                                {sub}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </LinearGradient>
                     </View>
                 </ScrollView>
 
@@ -315,9 +322,9 @@ const SubCategoryModalComponent = ({ visible, onClose, category, selectedInteres
 const SubCategoryModal = memo(SubCategoryModalComponent);
 
 const InterestAndHobbiesScreen = ({ navigation, route }) => {
-    const currentStep = 4;
+    const currentStep = route.params?.editMode ? null : 4;
     const totalSteps = 4;
-    const progress = (currentStep / totalSteps) * 100;
+    const progress = currentStep ? (currentStep / totalSteps) * 100 : 100;
 
     const [selectedInterests, setSelectedInterests] = useState({});
     const [modalVisible, setModalVisible] = useState(false);
@@ -325,12 +332,14 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
     const [currentCategory, setCurrentCategory] = useState(null);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    
     const [userRole, setUserRole] = useState('');
     const [shouldAwardBonus, setShouldAwardBonus] = useState(false);
     const [comingFrom, setComingFrom] = useState('');
+    const [canEdit, setCanEdit] = useState(true);
+    const [nextEditDate, setNextEditDate] = useState('');
 
     const mainCategoryCount = Object.keys(selectedInterests).length;
+    const isEditMode = route.params?.editMode || false;
 
     useEffect(() => {
         const getUserRole = async () => {
@@ -339,7 +348,6 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
                 if (userSession) {
                     const session = JSON.parse(userSession);
                     const role = session.user.user_metadata?.user_role || 'filler';
-                    console.log('👤 Detected user role from session:', role);
                     setUserRole(role);
                 }
             } catch (error) {
@@ -349,11 +357,8 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
 
         getUserRole();
         
-        // Also check route params (as fallback)
         if (route.params) {
-            console.log('Route params in Interest screen:', route.params);
             if (route.params.userRole) {
-                console.log('Setting user role from params:', route.params.userRole);
                 setUserRole(route.params.userRole);
             }
             if (route.params.shouldAwardBonus) {
@@ -362,10 +367,58 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
             if (route.params.comingFrom) {
                 setComingFrom(route.params.comingFrom);
             }
+            if (route.params.currentHobbies) {
+                setSelectedInterests(route.params.currentHobbies);
+            }
+            if (route.params.lastUpdated || route.params.profileCreatedAt) {
+                checkEditPermission(route.params.lastUpdated, route.params.profileCreatedAt);
+            }
         }
     }, [route.params]);
 
+    const checkEditPermission = (lastUpdated, profileCreatedAt) => {
+        const referenceDate = lastUpdated ? new Date(lastUpdated) : new Date(profileCreatedAt);
+        
+        if (!referenceDate || isNaN(referenceDate.getTime())) {
+            setCanEdit(true);
+            return;
+        }
+
+        const today = new Date();
+        
+        // Calculate months difference (6 months for hobbies)
+        const diffMonths = (today.getFullYear() - referenceDate.getFullYear()) * 12 
+          + (today.getMonth() - referenceDate.getMonth());
+        
+        const canEditNow = diffMonths >= 6;
+        setCanEdit(canEditNow);
+
+        if (!canEditNow) {
+            const nextUpdateDate = new Date(referenceDate);
+            nextUpdateDate.setMonth(nextUpdateDate.getMonth() + 6);
+            
+            // Format the date nicely
+            const formattedDate = nextUpdateDate.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            setNextEditDate(formattedDate);
+        }
+    };
+
     const toggleMainCategory = (categoryItem) => {
+        if (!canEdit && isEditMode) {
+            Alert.alert(
+                'Editing Locked',
+                `You can edit interests & hobbies only once every 6 months.\n\nYou can edit again on:\n${nextEditDate}`,
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+
         const categoryId = categoryItem.id;
         const isCurrentlySelected = selectedInterests.hasOwnProperty(categoryId);
 
@@ -395,6 +448,15 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
     }, []);
 
     const handleSave = async () => {
+        if (!canEdit && isEditMode) {
+            Alert.alert(
+                'Editing Locked',
+                `You can edit interests & hobbies only once every 6 months.\n\nYou can edit again on:\n${nextEditDate}`,
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+
         const totalMainSelections = Object.keys(selectedInterests).length;
 
         if (totalMainSelections === 0) {
@@ -411,29 +473,32 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
         setIsLoading(true);
 
         try {
-            const userSession = await AsyncStorage.getItem('@supabase_session');
-            if (!userSession) {
-                Alert.alert("Authentication Error", "User session expired or not found. Please log in again.");
-                navigation.navigate('SignIn'); 
+            const {
+                data: { session },
+                error: sessionError,
+              } = await supabase.auth.getSession();
+              
+              if (sessionError || !session) {
+                Alert.alert("Session Expired", "Please sign in again.");
+                navigation.navigate("SignIn");
                 return;
-            }
+              }
 
-            const session = JSON.parse(userSession);
             const accessToken = session.access_token;
-            const authUserID = session.user.id; 
-
-            // ✅ FIXED: Get user role from session
+            const authUserID = route.params?.userId || session.user.id;
             const userRole = session.user.user_metadata?.user_role || 'filler';
-            console.log("Final step - User role:", userRole);
 
             const payload = {
                 hobbies_data: selectedInterests,
-                profile_completed: true,
-                profile_completed_at: new Date().toISOString(),
-                profile_completed_step: 4,
+                hobbies_last_updated: new Date().toISOString(),
             };
 
-            console.log('Final payload:', payload);
+            // If not in edit mode, update profile completion fields
+            if (!isEditMode) {
+                payload.profile_completed = true;
+                payload.profile_completed_at = new Date().toISOString();
+                payload.profile_completed_step = 4;
+            }
 
             const response = await fetch(`${REST_API_URL}?user_id=eq.${authUserID}`, {
                 method: 'PATCH',
@@ -447,70 +512,59 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
             });
 
             if (response.ok) {
-                console.log('Profile completion saved successfully.');
+                console.log('Interests saved successfully.');
                 
-                try {
-                    // First get current wallet balance
-                    const getWalletResponse = await fetch(`${REST_API_URL}?user_id=eq.${authUserID}&select=wallet_balance`, {
-                        headers: {
-                            'Authorization': `Bearer ${accessToken}`,
-                            'apikey': SUPABASE_ANON_KEY,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    let currentBalance = 0;
-                    if (getWalletResponse.ok) {
-                        const walletData = await getWalletResponse.json();
-                        if (walletData && walletData.length > 0) {
-                            currentBalance = walletData[0].wallet_balance || 0;
-                        }
-                    }
-                    
-                    // Calculate new balance
-                    const newBalance = currentBalance + AWARD_AMOUNT;
-                    
-                    // ✅ UPDATED: Set different reward reason for creator
-                    const rewardReason = userRole === 'creator' 
-                      ? 'Profile completion bonus (Creator)' 
-                      : 'Profile completion bonus';
-                      
-                    // Update wallet with new balance
-                    const updateWalletResponse = await fetch(`${REST_API_URL}?user_id=eq.${authUserID}`, {
-                        method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${accessToken}`,
-                            'apikey': SUPABASE_ANON_KEY,
-                        },
-                        body: JSON.stringify({ 
-                            wallet_balance: newBalance,
-                            last_reward_received: new Date().toISOString(),
-                            reward_reason: rewardReason
-                        }),
-                    });
-                    
-                    if (updateWalletResponse.ok) {
-                        console.log(`✅ Wallet updated: ${currentBalance} + ${AWARD_AMOUNT} = ${newBalance}`);
+                if (!isEditMode) {
+                    try {
+                        const getWalletResponse = await fetch(`${REST_API_URL}?user_id=eq.${authUserID}&select=wallet_balance`, {
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'apikey': SUPABASE_ANON_KEY,
+                                'Content-Type': 'application/json'
+                            }
+                        });
                         
-                        // Show success modal
-                        setSuccessModalVisible(true);
-                    } else {
-                        const errorText = await updateWalletResponse.text();
-                        console.error('Wallet update failed:', errorText);
-                        Alert.alert("Error", "Could not update wallet balance. Please contact support.");
-                        setIsLoading(false);
+                        let currentBalance = 0;
+                        if (getWalletResponse.ok) {
+                            const walletData = await getWalletResponse.json();
+                            if (walletData && walletData.length > 0) {
+                                currentBalance = walletData[0].wallet_balance || 0;
+                            }
+                        }
+                        
+                        const newBalance = currentBalance + AWARD_AMOUNT;
+                        
+                        const rewardReason = userRole === 'creator' 
+                          ? 'Profile completion bonus (Creator)' 
+                          : 'Profile completion bonus';
+                          
+                        const updateWalletResponse = await fetch(`${REST_API_URL}?user_id=eq.${authUserID}`, {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${accessToken}`,
+                                'apikey': SUPABASE_ANON_KEY,
+                            },
+                            body: JSON.stringify({ 
+                                wallet_balance: newBalance,
+                                last_reward_received: new Date().toISOString(),
+                                reward_reason: rewardReason
+                            }),
+                        });
+                        
+                        if (updateWalletResponse.ok) {
+                            console.log(`✅ Wallet updated: ${currentBalance} + ${AWARD_AMOUNT} = ${newBalance}`);
+                        }
+                    } catch (walletError) {
+                        console.error('Error updating wallet:', walletError);
                     }
-                } catch (walletError) {
-                    console.error('Error updating wallet:', walletError);
-                    Alert.alert("Error", "Failed to update wallet balance. Please contact support.");
-                    setIsLoading(false);
                 }
                 
+                setSuccessModalVisible(true);
             } else {
                 const errorText = await response.text();
                 console.error('Update Failed:', response.status, errorText);
-                Alert.alert("Save Error", "Could not save profile completion.");
+                Alert.alert("Save Error", "Could not save interests.");
                 setIsLoading(false);
             }
 
@@ -524,7 +578,7 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
     const renderCategoryItem = (item) => {
         const isSelected = selectedInterests[item.id] && selectedInterests[item.id].length > 0;
         const currentSubCount = selectedInterests[item.id] ? selectedInterests[item.id].length : 0;
-        const isDisabled = !isSelected && mainCategoryCount >= MAX_MAIN_CATEGORIES;
+        const isDisabled = (!canEdit && isEditMode) || (!isSelected && mainCategoryCount >= MAX_MAIN_CATEGORIES);
 
         return (
             <View key={item.id} style={styles.categoryWrapper}>
@@ -537,18 +591,28 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
                     onPress={() => toggleMainCategory(item)}
                     disabled={isDisabled || isLoading}
                 >
-                    <MaterialCommunityIcons
-                        name={item.icon}
-                        size={30}
-                        color={isSelected ? '#fff' : '#FF7E1D'}
-                    />
+                    <View style={styles.categoryIconContainer}>
+                        <MaterialCommunityIcons
+                            name={item.icon}
+                            size={24}
+                            color={isSelected ? '#fff' : '#FF7E1D'}
+                        />
+                    </View>
                     <Text style={[styles.categoryText, isSelected && styles.categoryTextSelected]}>
                         {item.name}
                     </Text>
                     {isSelected && (
-                                         <View style={styles.badge}>
-                                             <Text style={styles.badgeText}>{currentSubCount}</Text>
-                                         </View>
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{currentSubCount}</Text>
+                        </View>
+                    )}
+                    {(!canEdit && isEditMode) && (
+                        <View style={[
+                            styles.lockOverlay,
+                            !isSelected && styles.lockOverlayHidden
+                        ]}>
+                            <MaterialIcons name="lock" size={20} color="#fff" />
+                        </View>
                     )}
                 </TouchableOpacity>
             </View>
@@ -562,19 +626,28 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
                     <MaterialIcons name="keyboard-arrow-left" size={30} color="#FF7E1D" />
                 </TouchableOpacity>
 
-                <View style={styles.progressBarContainer}>
-                    <View style={styles.progressBarTrack}>
-                        <LinearGradient
-                            colors={['#FF7E1D', '#FFD464']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={[styles.progressBarFill, { width: `${progress}%` }]}
-                        />
+                {currentStep && (
+                    <View style={styles.progressBarContainer}>
+                        <View style={styles.progressBarTrack}>
+                            <LinearGradient
+                                colors={['#FF7E1D', '#FFD464']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={[styles.progressBarFill, { width: `${progress}%` }]}
+                            />
+                        </View>
+                        <Text style={styles.stepText}>
+                            Progress: <Text style={{fontWeight: 'bold', color: '#FF7E1D'}}>Step {currentStep}</Text> of {totalSteps}
+                        </Text>
                     </View>
-                    <Text style={styles.stepText}>
-                        Progress: <Text style={{fontWeight: 'bold', color: '#FF7E1D'}}>Step {currentStep}</Text> of {totalSteps}
-                    </Text>
-                </View>
+                )}
+                
+                {isEditMode && (
+                    <View style={styles.editModeHeader}>
+                        <Text style={styles.editModeTitle}>Edit Interests & Hobbies</Text>
+                    </View>
+                )}
+                
                 <View style={styles.navIcon} />
             </View>
 
@@ -589,10 +662,47 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
                         >
                             <MaterialIcons name="favorite" size={24} color="#fff" />
                         </LinearGradient>
-                        <Text style={styles.cardTitle}>Interest & Hobbies</Text>
+                        <Text style={styles.cardTitle}>
+                            {isEditMode ? 'Edit Interests & Hobbies' : 'Interest & Hobbies'}
+                        </Text>
                     </View>
 
+                    {isEditMode && (
+                        <View style={[
+                            styles.editModeStatus,
+                            { 
+                                backgroundColor: canEdit ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 126, 29, 0.1)',
+                                borderColor: canEdit ? 'rgba(76, 175, 80, 0.3)' : 'rgba(255, 126, 29, 0.3)',
+                                borderWidth: 1
+                            }
+                        ]}>
+                            <MaterialIcons 
+                                name={canEdit ? "lock-open" : "lock"} 
+                                size={16} 
+                                color={canEdit ? '#4CAF50' : '#FF7E1D'} 
+                            />
+                            <Text style={[
+                                styles.editModeStatusText,
+                                { color: canEdit ? '#4CAF50' : '#FF7E1D' }
+                            ]}>
+                                {canEdit ? 'Editable Now' : 'Locked'}
+                            </Text>
+                        </View>
+                    )}
+
                     {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+                    <Text style={styles.instructions}>
+                        {isEditMode 
+                            ? `Select up to ${MAX_MAIN_CATEGORIES} main categories and ${MAX_SUB_CATEGORIES} sub-interests per category. You can edit this only once every 6 months.`
+                            : `Select up to ${MAX_MAIN_CATEGORIES} main categories and ${MAX_SUB_CATEGORIES} sub-interests per category. This helps us match you with relevant surveys.`}
+                    </Text>
+
+                    <View style={styles.selectionInfo}>
+                        <Text style={styles.selectionCount}>
+                            Selected: {mainCategoryCount}/{MAX_MAIN_CATEGORIES} main categories
+                        </Text>
+                    </View>
 
                     <View style={styles.gridContainer}>
                         {INTEREST_DATA.map(renderCategoryItem)}
@@ -602,12 +712,13 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
                         onPress={handleSave} 
                         style={[
                             styles.saveButtonContainer,
+                            (!canEdit && isEditMode) && styles.saveButtonDisabled,
                             isLoading && styles.saveButtonDisabled
                         ]}
-                        disabled={isLoading}
+                        disabled={(!canEdit && isEditMode) || isLoading}
                     >
                         <LinearGradient
-                            colors={['#FF7E1D', '#FFD464']}
+                            colors={(!canEdit && isEditMode) ? ['#cccccc', '#dddddd'] : ['#FF7E1D', '#FFD464']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={styles.saveButtonGradient}
@@ -617,7 +728,9 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
                             ) : (
                                 <>
                                     <MaterialIcons name="check" size={20} color="#fff" />
-                                    <Text style={styles.saveButtonText}>Save & Finish</Text>
+                                    <Text style={styles.saveButtonText}>
+                                        {isEditMode ? 'Update Interests' : 'Save & Finish'}
+                                    </Text>
                                 </>
                             )}
                         </LinearGradient>
@@ -641,6 +754,7 @@ const InterestAndHobbiesScreen = ({ navigation, route }) => {
                 awardedAmount={AWARD_AMOUNT}
                 navigation={navigation}
                 userRole={userRole}
+                isEditMode={isEditMode}
             />
         </View>
     );
@@ -688,6 +802,15 @@ const styles = StyleSheet.create({
         height: '100%',
         borderRadius: 3,
     },
+    editModeHeader: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    editModeTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+    },
     scrollContent: {
         paddingHorizontal: 20,
         alignItems: 'center',
@@ -707,7 +830,7 @@ const styles = StyleSheet.create({
     cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 15,
     },
     iconGradientContainer: {
         padding: 8,
@@ -721,31 +844,66 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#333',
     },
+    editModeStatus: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 10,
+        borderRadius: 10,
+        marginBottom: 15,
+        alignSelf: 'flex-start',
+    },
+    editModeStatusText: {
+        fontSize: 14,
+        fontWeight: '500',
+        marginLeft: 8,
+    },
+    instructions: {
+        fontSize: 14,
+        color: '#666',
+        marginBottom: 15,
+        lineHeight: 20,
+    },
+    selectionInfo: {
+        backgroundColor: 'rgba(255, 126, 29, 0.1)',
+        padding: 10,
+        borderRadius: 10,
+        marginBottom: 20,
+        alignItems: 'center',
+    },
+    selectionCount: {
+        fontSize: 14,
+        color: '#FF7E1D',
+        fontWeight: '600',
+    },
     errorText: {
         fontSize: 14,
         color: '#FF3B30',
         textAlign: 'center',
-        marginBottom: 10,
+        marginBottom: 15,
         fontWeight: '500',
+        backgroundColor: 'rgba(255, 59, 48, 0.1)',
+        padding: 10,
+        borderRadius: 8,
     },
     gridContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
         width: '100%',
+        marginBottom: 20,
     },
     categoryWrapper: {
         width: '48%',
-        marginBottom: 10,
+        marginBottom: 15,
     },
     categoryButton: {
         width: '100%',
-        height: 90,
+        height: 110,
         backgroundColor: '#f7f7f7',
         borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 10,
+        padding: 15,
         position: 'relative',
         borderWidth: 1,
         borderColor: '#f7f7f7',
@@ -760,10 +918,11 @@ const styles = StyleSheet.create({
     },
     categoryButtonDisabled: {
         opacity: 0.5,
-        backgroundColor: '#e0e0e0',
+    },
+    categoryIconContainer: {
+        marginBottom: 8,
     },
     categoryText: {
-        marginTop: 5,
         fontSize: 13,
         fontWeight: '600',
         color: '#333',
@@ -774,12 +933,12 @@ const styles = StyleSheet.create({
     },
     badge: {
         position: 'absolute',
-        top: 5,
-        right: 5,
+        top: 8,
+        right: 8,
         backgroundColor: '#fff',
         borderRadius: 10,
-        width: 20,
-        height: 20,
+        width: 22,
+        height: 22,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
@@ -789,6 +948,20 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: 'bold',
         color: '#FF7E1D',
+    },
+    lockOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    lockOverlayHidden: {
+        display: 'none',
     },
     modalContainer: {
         flex: 1,
@@ -881,7 +1054,7 @@ const styles = StyleSheet.create({
         alignSelf: 'center',
     },
     saveButtonContainer: {
-        marginTop: 30,
+        marginTop: 10,
         alignSelf: 'flex-start',
         width: '100%',
     },
@@ -892,7 +1065,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 12,
+        paddingVertical: 15,
         paddingHorizontal: 30,
         borderRadius: 30,
         shadowColor: '#FF7E1D',
@@ -960,14 +1133,6 @@ const styles = StyleSheet.create({
         color: '#FF7E1D',
         marginLeft: 8,
         fontWeight: '600',
-    },
-    additionalMessage: {
-        fontSize: 14,
-        color: '#666',
-        textAlign: 'center',
-        marginTop: 5,
-        marginBottom: 20,
-        fontStyle: 'italic',
     },
     rewardModalButtonContainer: {
         width: '100%',

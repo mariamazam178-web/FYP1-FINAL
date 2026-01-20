@@ -29,12 +29,112 @@ const InfoRow = ({ label, value }) => {
   );
 };
 
-const SectionHeader = ({ title, iconName }) => (
-  <View style={styles.sectionHeader}>
-    <MaterialIcons name={iconName} size={20} color="#FF7E1D" />
-    <Text style={styles.sectionTitle}>{title}</Text>
-  </View>
-);
+const EditableInfoRow = ({ 
+  label, 
+  value, 
+  canEdit, 
+  onEdit,
+  nextEditDate,
+  editFrequency = 12
+}) => {
+  const handlePress = () => {
+    if (!canEdit && nextEditDate) {
+      Alert.alert(
+        'Editing Locked',
+        `You can edit ${label.toLowerCase()} only once every ${editFrequency} months.\n\nYou can edit again on:\n${nextEditDate}`,
+        [{ text: 'OK' }]
+      );
+    } else {
+      onEdit();
+    }
+  };
+
+  return (
+    <View style={styles.editableInfoRow}>
+      <View style={styles.editableInfoContent}>
+        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.value}>{value || "Not provided"}</Text>
+      </View>
+      
+      <TouchableOpacity
+        style={[
+          styles.editButton,
+          !canEdit && styles.editButtonDisabled
+        ]}
+        onPress={handlePress}
+      >
+        <LinearGradient
+          colors={canEdit ? ['#FF7E1D', '#FFD464'] : ['#cccccc', '#dddddd']}
+          style={styles.editButtonGradient}
+        >
+          <MaterialIcons 
+            name={canEdit ? "edit" : "lock"} 
+            size={16} 
+            color={canEdit ? "#fff" : "#999"} 
+          />
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const SectionHeader = ({ 
+  title, 
+  iconName, 
+  showEditButton, 
+  onEdit, 
+  canEdit, 
+  nextEditDate, 
+  editFrequency 
+}) => {
+  const handlePress = () => {
+    if (!canEdit && nextEditDate) {
+      Alert.alert(
+        'Editing Locked',
+        `You can edit ${title.toLowerCase()} only once every ${editFrequency} months.\n\nYou can edit again on:\n${nextEditDate}`,
+        [{ text: 'OK' }]
+      );
+    } else {
+      onEdit();
+    }
+  };
+
+  return (
+    <View style={styles.sectionHeaderWithEdit}>
+      <View style={styles.sectionHeader}>
+        <MaterialIcons name={iconName} size={20} color="#FF7E1D" />
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      
+      {showEditButton && (
+        <TouchableOpacity
+          style={[
+            styles.sectionEditButton,
+            !canEdit && styles.sectionEditButtonDisabled
+          ]}
+          onPress={handlePress}
+        >
+          <LinearGradient
+            colors={canEdit ? ['#FF7E1D', '#FFD464'] : ['#cccccc', '#dddddd']}
+            style={styles.sectionEditButtonGradient}
+          >
+            <MaterialIcons 
+              name={canEdit ? "edit" : "lock"} 
+              size={14} 
+              color={canEdit ? "#fff" : "#999"} 
+            />
+            <Text style={[
+              styles.sectionEditButtonText,
+              !canEdit && styles.sectionEditButtonTextDisabled
+            ]}>
+              {canEdit ? 'Edit' : 'Locked'}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
 
 const TabItem = ({ iconName, label, isCurrent, onPress }) => (
   <TouchableOpacity
@@ -108,6 +208,56 @@ const RoleSwitchWelcomeModal = ({ visible, onClose, fromRole, toRole }) => {
   );
 };
 
+const isFieldEditable = (lastUpdated, profileCreatedAt, months = 0) => {
+  // If never edited, check against profile creation date
+  if (!lastUpdated) {
+    if (!profileCreatedAt) return true; // No profile creation date, allow editing
+    
+    const profileCreationDate = new Date(profileCreatedAt);
+    const today = new Date();
+    
+    // Calculate months since profile was created
+    const diffMonths = (today.getFullYear() - profileCreationDate.getFullYear()) * 12 
+      + (today.getMonth() - profileCreationDate.getMonth());
+    
+    return diffMonths >= months;
+  }
+  
+  // If edited before, check against last edit date
+  const lastUpdateDate = new Date(lastUpdated);
+  const today = new Date();
+  
+  // Calculate months difference
+  const diffMonths = (today.getFullYear() - lastUpdateDate.getFullYear()) * 12 
+    + (today.getMonth() - lastUpdateDate.getMonth());
+  
+  return diffMonths >= months;
+};
+
+const getNextEditDate = (lastUpdated, profileCreatedAt, monthsRequired) => {
+  const referenceDate = lastUpdated ? new Date(lastUpdated) : new Date(profileCreatedAt);
+  
+  if (!referenceDate || isNaN(referenceDate.getTime())) {
+    return null;
+  }
+  
+  const nextUpdateDate = new Date(referenceDate);
+  nextUpdateDate.setMonth(nextUpdateDate.getMonth() + monthsRequired);
+  
+  const now = new Date();
+  
+  if (now >= nextUpdateDate) {
+    return null;
+  }
+  
+  return nextUpdateDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+};
+
 const ProfileViewScreen = ({ navigation, route }) => {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -120,6 +270,15 @@ const ProfileViewScreen = ({ navigation, route }) => {
   const [showRoleSwitchModal, setShowRoleSwitchModal] = useState(false);
   const [switchedFrom, setSwitchedFrom] = useState('');
   const [walletBalance, setWalletBalance] = useState(0);
+  
+  // Edit permission states
+  const [canEditProfession, setCanEditProfession] = useState(false);
+  const [canEditEducation, setCanEditEducation] = useState(false);
+  const [canEditHobbies, setCanEditHobbies] = useState(false);
+  
+  const [professionNextEditDate, setProfessionNextEditDate] = useState("");
+  const [educationNextEditDate, setEducationNextEditDate] = useState("");
+  const [hobbiesNextEditDate, setHobbiesNextEditDate] = useState("");
 
   useEffect(() => {
     fetchProfileData();
@@ -131,6 +290,51 @@ const ProfileViewScreen = ({ navigation, route }) => {
       navigation.setParams({ refreshedProfile: undefined });
     }
   }, [route.params]);
+
+  useEffect(() => {
+    if (profileData) {
+      const profileCreatedAt = profileData.profile_completed_at;
+      
+      // Check profession (can edit every 12 months from profile creation or last edit)
+      const profEditable = isFieldEditable(
+        profileData.profession_last_updated, 
+        profileCreatedAt,
+        12
+      );
+      setCanEditProfession(profEditable);
+      setProfessionNextEditDate(getNextEditDate(
+        profileData.profession_last_updated, 
+        profileCreatedAt,
+        12
+      ));
+      
+      // Check education (can edit every 12 months)
+      const eduEditable = isFieldEditable(
+        profileData.education_last_updated, 
+        profileCreatedAt,
+        12
+      );
+      setCanEditEducation(eduEditable);
+      setEducationNextEditDate(getNextEditDate(
+        profileData.education_last_updated, 
+        profileCreatedAt,
+        12
+      ));
+      
+      // Check hobbies (can edit every 6 months)
+      const hobbiesEditable = isFieldEditable(
+        profileData.hobbies_last_updated, 
+        profileCreatedAt,
+        6
+      );
+      setCanEditHobbies(hobbiesEditable);
+      setHobbiesNextEditDate(getNextEditDate(
+        profileData.hobbies_last_updated, 
+        profileCreatedAt,
+        6
+      ));
+    }
+  }, [profileData]);
 
   const fetchProfileData = async () => {
     try {
@@ -183,7 +387,6 @@ const ProfileViewScreen = ({ navigation, route }) => {
             setUserRole("filler");
           }
           
-          console.log('✅ Profile loaded successfully');
         } else {
           Alert.alert(
             "Profile Not Found",
@@ -357,6 +560,38 @@ const ProfileViewScreen = ({ navigation, route }) => {
       ? "Switch to Filler Account"
       : "Switch to Creator Account";
 
+  // Edit functions
+  const handleEditProfession = () => {
+    navigation.navigate("EditProfileScreen", {
+      field: 'profession',
+      currentValue: profileData.profession,
+      lastUpdated: profileData.profession_last_updated,
+      profileCreatedAt: profileData.profile_completed_at,
+      userId: profileData.user_id
+    });
+  };
+
+  const handleEditEducation = () => {
+    navigation.navigate("EditProfileScreen", {
+      field: 'education',
+      currentValue: profileData.education,
+      lastUpdated: profileData.education_last_updated,
+      profileCreatedAt: profileData.profile_completed_at,
+      userId: profileData.user_id
+    });
+  };
+
+  const handleEditHobbies = () => {
+    navigation.navigate("InterestAndHobbies", {
+      editMode: true,
+      currentHobbies: profileData.hobbies_data,
+      lastUpdated: profileData.hobbies_last_updated,
+      profileCreatedAt: profileData.profile_completed_at,
+      userId: profileData.user_id,
+      comingFrom: 'profile_view'
+    });
+  };
+
   if (loading && !refreshing)
     return (
       <View style={styles.loadingContainer}>
@@ -490,9 +725,26 @@ const ProfileViewScreen = ({ navigation, route }) => {
               iconName="work-outline"
             />
           </View>
-          <InfoRow label="Education" value={profileData.education} />
+          
+          <EditableInfoRow
+            label="Profession"
+            value={profileData.profession}
+            canEdit={canEditProfession}
+            onEdit={handleEditProfession}
+            nextEditDate={professionNextEditDate}
+            editFrequency={12}
+          />
+          
+          <EditableInfoRow
+            label="Education"
+            value={profileData.education}
+            canEdit={canEditEducation}
+            onEdit={handleEditEducation}
+            nextEditDate={educationNextEditDate}
+            editFrequency={12}
+          />
+          
           <InfoRow label="Major" value={profileData.major} />
-          <InfoRow label="Profession" value={profileData.profession} />
           <InfoRow
             label="Monthly Income"
             value={formatIncome(profileData.monthly_income)}
@@ -506,6 +758,11 @@ const ProfileViewScreen = ({ navigation, route }) => {
                 <SectionHeader
                   title="Interests & Hobbies"
                   iconName="favorite"
+                  showEditButton={true}
+                  onEdit={handleEditHobbies}
+                  canEdit={canEditHobbies}
+                  nextEditDate={hobbiesNextEditDate}
+                  editFrequency={6}
                 />
               </View>
               <Text style={styles.hobbiesText}>
@@ -786,11 +1043,65 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sectionHeader: { flexDirection: "row", alignItems: "center" },
+  sectionHeaderWithEdit: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
     marginLeft: 10,
+  },
+  sectionEditButton: {
+    padding: 5,
+  },
+  sectionEditButtonDisabled: {
+    opacity: 0.7,
+  },
+  sectionEditButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    justifyContent: 'center',
+    minWidth: 60,
+  },
+  sectionEditButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  sectionEditButtonTextDisabled: {
+    color: '#999',
+  },
+  editableInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
+  },
+  editableInfoContent: {
+    flex: 1,
+  },
+  editButton: {
+    marginLeft: 10,
+  },
+  editButtonDisabled: {
+    opacity: 0.7,
+  },
+  editButtonGradient: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
   },
   roleRow: {
     flexDirection: "row",
