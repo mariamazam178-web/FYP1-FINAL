@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../../supabaseClient";
+import * as Location from 'expo-location';
 
 const SUPABASE_URL = "https://oyavjqycsjfcnzlshdsu.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95YXZqcXljc2pmY256bHNoZHN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxNTgwMjcsImV4cCI6MjA3NTczNDAyN30.22cwyIWSBmhLefCvobdbH42cPSTnw_NmSwbwaYvyLy4";
@@ -69,6 +70,62 @@ const EditableInfoRow = ({
         >
           <MaterialIcons 
             name={canEdit ? "edit" : "lock"} 
+            size={16} 
+            color={canEdit ? "#fff" : "#999"} 
+          />
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const EditableInfoRowForLocation = ({ 
+  label, 
+  value, 
+  canEdit, 
+  onEdit,
+  nextEditDate,
+  editFrequency = 12
+}) => {
+  const handlePress = () => {
+    if (!canEdit && nextEditDate) {
+      Alert.alert(
+        'Editing Locked',
+        `You can edit ${label.toLowerCase()} only once every ${editFrequency} months.\n\nYou can edit again on:\n${nextEditDate}`,
+        [{ text: 'OK' }]
+      );
+    } else {
+      Alert.alert(
+        'Update Location',
+        'Your current location will be detected automatically. Do you want to continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Yes, Detect Location', onPress: onEdit }
+        ]
+      );
+    }
+  };
+
+  return (
+    <View style={styles.editableInfoRow}>
+      <View style={styles.editableInfoContent}>
+        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.value}>{value || "Not provided"}</Text>
+      </View>
+      
+      <TouchableOpacity
+        style={[
+          styles.editButton,
+          !canEdit && styles.editButtonDisabled
+        ]}
+        onPress={handlePress}
+      >
+        <LinearGradient
+          colors={canEdit ? ['#FF7E1D', '#FFD464'] : ['#cccccc', '#dddddd']}
+          style={styles.editButtonGradient}
+        >
+          <MaterialIcons 
+            name={canEdit ? "location-on" : "lock"} 
             size={16} 
             color={canEdit ? "#fff" : "#999"} 
           />
@@ -270,15 +327,24 @@ const ProfileViewScreen = ({ navigation, route }) => {
   const [showRoleSwitchModal, setShowRoleSwitchModal] = useState(false);
   const [switchedFrom, setSwitchedFrom] = useState('');
   const [walletBalance, setWalletBalance] = useState(0);
+  const [updatingLocation, setUpdatingLocation] = useState(false);
   
-  // Edit permission states
+  // Edit permission states - ALL FIELDS now
   const [canEditProfession, setCanEditProfession] = useState(false);
   const [canEditEducation, setCanEditEducation] = useState(false);
   const [canEditHobbies, setCanEditHobbies] = useState(false);
+  const [canEditMaritalStatus, setCanEditMaritalStatus] = useState(false);
+  const [canEditLocation, setCanEditLocation] = useState(false);
+  const [canEditMobileNumber, setCanEditMobileNumber] = useState(false);
+  const [canEditMonthlyIncome, setCanEditMonthlyIncome] = useState(false);
   
   const [professionNextEditDate, setProfessionNextEditDate] = useState("");
   const [educationNextEditDate, setEducationNextEditDate] = useState("");
   const [hobbiesNextEditDate, setHobbiesNextEditDate] = useState("");
+  const [maritalStatusNextEditDate, setMaritalStatusNextEditDate] = useState("");
+  const [locationNextEditDate, setLocationNextEditDate] = useState("");
+  const [mobileNumberNextEditDate, setMobileNumberNextEditDate] = useState("");
+  const [monthlyIncomeNextEditDate, setMonthlyIncomeNextEditDate] = useState("");
 
   useEffect(() => {
     fetchProfileData();
@@ -295,7 +361,7 @@ const ProfileViewScreen = ({ navigation, route }) => {
     if (profileData) {
       const profileCreatedAt = profileData.profile_completed_at;
       
-      // Check profession (can edit every 12 months from profile creation or last edit)
+      // Check profession (can edit every 12 months)
       const profEditable = isFieldEditable(
         profileData.profession_last_updated, 
         profileCreatedAt,
@@ -332,6 +398,58 @@ const ProfileViewScreen = ({ navigation, route }) => {
         profileData.hobbies_last_updated, 
         profileCreatedAt,
         6
+      ));
+      
+      // Check marital status (can edit every 12 months)
+      const maritalEditable = isFieldEditable(
+        profileData.marital_status_last_updated, 
+        profileCreatedAt,
+        12
+      );
+      setCanEditMaritalStatus(maritalEditable);
+      setMaritalStatusNextEditDate(getNextEditDate(
+        profileData.marital_status_last_updated, 
+        profileCreatedAt,
+        12
+      ));
+      
+      // Check location (can edit every 12 months)
+      const locationEditable = isFieldEditable(
+        profileData.location_last_updated, 
+        profileCreatedAt,
+        12
+      );
+      setCanEditLocation(locationEditable);
+      setLocationNextEditDate(getNextEditDate(
+        profileData.location_last_updated, 
+        profileCreatedAt,
+        12
+      ));
+      
+      // Check mobile number (can edit every 12 months)
+      const mobileEditable = isFieldEditable(
+        profileData.mobile_last_updated, 
+        profileCreatedAt,
+        12
+      );
+      setCanEditMobileNumber(mobileEditable);
+      setMobileNumberNextEditDate(getNextEditDate(
+        profileData.mobile_last_updated, 
+        profileCreatedAt,
+        12
+      ));
+      
+      // Check monthly income (can edit every 12 months)
+      const incomeEditable = isFieldEditable(
+        profileData.income_last_updated, 
+        profileCreatedAt,
+        12
+      );
+      setCanEditMonthlyIncome(incomeEditable);
+      setMonthlyIncomeNextEditDate(getNextEditDate(
+        profileData.income_last_updated, 
+        profileCreatedAt,
+        12
       ));
     }
   }, [profileData]);
@@ -592,6 +710,154 @@ const ProfileViewScreen = ({ navigation, route }) => {
     });
   };
 
+  const handleEditMaritalStatus = () => {
+    navigation.navigate("EditProfileScreen", {
+      field: 'marital_status',
+      currentValue: profileData.marital_status,
+      lastUpdated: profileData.marital_status_last_updated,
+      profileCreatedAt: profileData.profile_completed_at,
+      userId: profileData.user_id
+    });
+  };
+
+  const handleEditMobileNumber = () => {
+    navigation.navigate("EditProfileScreen", {
+      field: 'mobile_number',
+      currentValue: profileData.mobile_number,
+      lastUpdated: profileData.mobile_last_updated,
+      profileCreatedAt: profileData.profile_completed_at,
+      userId: profileData.user_id
+    });
+  };
+
+  const handleEditMonthlyIncome = () => {
+    navigation.navigate("EditProfileScreen", {
+      field: 'monthly_income',
+      currentValue: profileData.monthly_income ? profileData.monthly_income.toString() : '',
+      lastUpdated: profileData.income_last_updated,
+      profileCreatedAt: profileData.profile_completed_at,
+      userId: profileData.user_id
+    });
+  };
+
+  const handleEditLocation = async () => {
+    if (!canEditLocation) {
+      Alert.alert(
+        'Editing Locked',
+        `You can edit location only once every 12 months.\n\nYou can edit again on:\n${locationNextEditDate}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setUpdatingLocation(true);
+    
+    try {
+      // Request location permissions
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Denied',
+          'Location permission is required to update your location.',
+          [{ text: 'OK' }]
+        );
+        setUpdatingLocation(false);
+        return;
+      }
+
+      // Get current location
+      let location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const { latitude, longitude } = location.coords;
+
+      // Get address from coordinates
+      let address = await Location.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      });
+
+      let locationString = '';
+      if (address.length > 0) {
+        const addr = address[0];
+        locationString = `${addr.city || ''}, ${addr.region || ''}, ${addr.country || ''}`.trim();
+      } else {
+        locationString = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+      }
+
+      // Ask for confirmation
+      Alert.alert(
+        'Update Location',
+        `Your detected location is: ${locationString}\n\nDo you want to update your profile with this location?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Yes, Update',
+            onPress: async () => {
+              try {
+                const {
+                  data: { session },
+                  error: sessionError,
+                } = await supabase.auth.getSession();
+                
+                if (sessionError || !session) {
+                  Alert.alert("Session Expired", "Please sign in again.");
+                  navigation.navigate("SignIn");
+                  return;
+                }
+
+                const updateData = {
+                  location_coords: locationString,
+                  location_last_updated: new Date().toISOString(),
+                };
+
+                const response = await fetch(
+                  `${USER_PROFILES_URL}?user_id=eq.${profileData.user_id}`,
+                  {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${session.access_token}`,
+                      'apikey': SUPABASE_ANON_KEY,
+                      'Prefer': 'return=representation',
+                    },
+                    body: JSON.stringify(updateData),
+                  }
+                );
+
+                if (response.ok) {
+                  Alert.alert('Success', 'Location updated successfully!', [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        fetchProfileData();
+                      }
+                    }
+                  ]);
+                } else {
+                  const errorText = await response.text();
+                  console.error('Location update failed:', errorText);
+                  Alert.alert('Error', 'Failed to update location. Please try again.');
+                }
+              } catch (error) {
+                console.error('Error updating location:', error);
+                Alert.alert('Error', 'An unexpected error occurred.');
+              }
+            }
+          }
+        ]
+      );
+
+    } catch (error) {
+      console.error('Error detecting location:', error);
+      Alert.alert('Error', 'Failed to detect your location. Please try again.');
+    } finally {
+      setUpdatingLocation(false);
+    }
+  };
+
   if (loading && !refreshing)
     return (
       <View style={styles.loadingContainer}>
@@ -700,7 +966,15 @@ const ProfileViewScreen = ({ navigation, route }) => {
             label="Date of Birth"
             value={formatDate(profileData.date_of_birth)}
           />
-          <InfoRow label="Marital Status" value={profileData.marital_status} />
+          
+          <EditableInfoRow
+            label="Marital Status"
+            value={profileData.marital_status}
+            canEdit={canEditMaritalStatus}
+            onEdit={handleEditMaritalStatus}
+            nextEditDate={maritalStatusNextEditDate}
+            editFrequency={12}
+          />
         </View>
 
         <View style={styles.sectionCard}>
@@ -710,12 +984,32 @@ const ProfileViewScreen = ({ navigation, route }) => {
               iconName="contact-phone"
             />
           </View>
-          <InfoRow label="Mobile Number" value={profileData.mobile_number} />
+          
+          <EditableInfoRow
+            label="Mobile Number"
+            value={profileData.mobile_number}
+            canEdit={canEditMobileNumber}
+            onEdit={handleEditMobileNumber}
+            nextEditDate={mobileNumberNextEditDate}
+            editFrequency={12}
+          />
+          
           <InfoRow label="CNIC" value={profileData.cnic_number} />
-          <InfoRow
+          
+          <EditableInfoRowForLocation
             label="Location"
             value={formatLocation(profileData.location_coords)}
+            canEdit={canEditLocation}
+            onEdit={handleEditLocation}
+            nextEditDate={locationNextEditDate}
+            editFrequency={12}
           />
+          {updatingLocation && (
+            <View style={styles.locationLoading}>
+              <ActivityIndicator size="small" color="#FF7E1D" />
+              <Text style={styles.locationLoadingText}>Detecting your location...</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.sectionCard}>
@@ -745,9 +1039,14 @@ const ProfileViewScreen = ({ navigation, route }) => {
           />
           
           <InfoRow label="Major" value={profileData.major} />
-          <InfoRow
+          
+          <EditableInfoRow
             label="Monthly Income"
             value={formatIncome(profileData.monthly_income)}
+            canEdit={canEditMonthlyIncome}
+            onEdit={handleEditMonthlyIncome}
+            nextEditDate={monthlyIncomeNextEditDate}
+            editFrequency={12}
           />
         </View>
 
@@ -1102,6 +1401,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 2,
+  },
+  locationLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    marginTop: 5,
+  },
+  locationLoadingText: {
+    fontSize: 12,
+    color: '#FF7E1D',
+    marginLeft: 8,
   },
   roleRow: {
     flexDirection: "row",

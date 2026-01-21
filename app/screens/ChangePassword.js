@@ -73,42 +73,76 @@ const ChangePasswordScreen = ({ navigation }) => {
         symbol: false,
     });
 
-    // 🛡️ Blacklist for Profanity/Common Passwords Check (SignUpScreen jaisa)
-    const PROFANITY_BLACKLIST = [
-        "badword1", 
-        "swearword2", 
-        "idiot", 
-        "stupid",
-        "admin",
-        "password", 
+    // 🛡️ BLACKLIST for EXTREMELY WEAK PASSWORDS ONLY
+    // Only include passwords that are TOO COMMON AND WEAK
+    const EXTREMELY_WEAK_PASSWORDS = [
+        "password",
+        "12345678",
         "123456789",
+        "1234567890",
         "qwerty",
-        "111111111",
+        "abc123",
+        "password1",
+        "admin123",
+        "letmein",
+        "welcome",
+        "monkey",
+        "dragon",
+        "baseball",
+        "football",
+        "superman",
+        "harley",
+        "michael",
+        "shadow",
+        "master",
+        "jennifer",
+        "jordan",
+        "trustno1",
+        "sunshine",
+        "iloveyou",
+        "starwars",
+        "computer",
+        "whatever",
+        "hello",
+        "zaq1zaq1",
+        "password123",
+        "admin",
+        "12345",
+        "1234",
     ];
 
-    // 🔑 PASSWORD VALIDATION FUNCTION (SignUpScreen jaisa)
-    const validatePassword = (p) => {
+    // 🔑 PASSWORD VALIDATION FUNCTION - UPDATED LOGIC
+    const validatePassword = (password) => {
         const MAX_LENGTH = 128; 
-        const trimmedPassword = p.trim();
+        const trimmedPassword = password.trim();
 
         // 1. Required Field
         if (!trimmedPassword) {
             return "Password is required.";
         }
 
-        // 2. Maximum Length Check (Client-side enforcement)
+        // 2. Maximum Length Check
         if (trimmedPassword.length > MAX_LENGTH) {
             return `Password cannot exceed ${MAX_LENGTH} characters.`;
         }
 
-        // 3. Blacklist/Common Words Check
+        // 3. Check if password is EXACTLY one of the extremely weak passwords
+        // (not just contains, but is exactly the weak password)
         const lowerPassword = trimmedPassword.toLowerCase();
-        const isBlacklisted = PROFANITY_BLACKLIST.some(word => lowerPassword.includes(word));
-        if (isBlacklisted) {
-            return "Avoid very common or weak passwords.";
+        const isExtremelyWeak = EXTREMELY_WEAK_PASSWORDS.some(
+            weakPass => lowerPassword === weakPass.toLowerCase()
+        );
+        
+        if (isExtremelyWeak) {
+            return "This password is too common and weak. Please choose a stronger one.";
         }
 
-        return ""; 
+        // 4. Check if password is too short
+        if (trimmedPassword.length < 13) {
+            return "Password must be at least 13 characters long.";
+        }
+
+        return ""; // No error
     };
 
     // Validate new password criteria (SignUpScreen jaisa hi)
@@ -128,6 +162,41 @@ const ChangePasswordScreen = ({ navigation }) => {
 
     const isPasswordStrong = Object.values(criteria).every(val => val === true);
 
+    // Function to verify current password by re-authenticating user
+    const verifyCurrentPassword = async (password) => {
+        try {
+            // Get current user's email
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            
+            if (userError || !user) {
+                throw new Error('Unable to retrieve user information');
+            }
+
+            // Re-authenticate user with current password
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+                email: user.email,
+                password: password,
+            });
+
+            if (signInError) {
+                // Check if error is due to invalid credentials
+                if (signInError.message.includes('Invalid login credentials') || 
+                    signInError.message.includes('Invalid email or password')) {
+                    return { success: false, error: 'Current password is incorrect' };
+                }
+                throw signInError;
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('Password verification error:', error);
+            return { 
+                success: false, 
+                error: error.message || 'Failed to verify current password' 
+            };
+        }
+    };
+
     const handlePasswordChange = async () => {
         // Validation
         if (!currentPassword || !newPassword || !confirmPassword) {
@@ -140,13 +209,30 @@ const ChangePasswordScreen = ({ navigation }) => {
             return;
         }
 
-        // Check if password meets all criteria
-        if (!isPasswordStrong) {
-            Alert.alert('Weak Password', 'Please ensure your password meets all security criteria.');
+        // Check if current and new passwords are different
+        if (currentPassword === newPassword) {
+            Alert.alert('Error', 'New password must be different from current password.');
             return;
         }
 
-        // Additional validation
+        // Check if password meets all criteria - SHOW SPECIFIC ERROR
+        if (!isPasswordStrong) {
+            // Find which criteria are missing
+            const missingCriteria = [];
+            if (!criteria.length) missingCriteria.push("• At least 13 characters");
+            if (!criteria.uppercase) missingCriteria.push("• At least one uppercase letter (A-Z)");
+            if (!criteria.lowercase) missingCriteria.push("• At least one lowercase letter (a-z)");
+            if (!criteria.number) missingCriteria.push("• At least one number (0-9)");
+            if (!criteria.symbol) missingCriteria.push("• At least one symbol (!@#$%^&*)");
+            
+            Alert.alert(
+                'Password Requirements Not Met', 
+                `Please ensure your password meets all the following requirements:\n\n${missingCriteria.join('\n')}`
+            );
+            return;
+        }
+
+        // Additional validation - ONLY for extremely weak passwords
         const passwordError = validatePassword(newPassword);
         if (passwordError) {
             Alert.alert('Error', passwordError);
@@ -155,7 +241,16 @@ const ChangePasswordScreen = ({ navigation }) => {
 
         setLoading(true);
         try {
-            // Supabase password update
+            // Step 1: Verify current password
+            const verification = await verifyCurrentPassword(currentPassword);
+            
+            if (!verification.success) {
+                Alert.alert('Authentication Failed', verification.error || 'Current password is incorrect.');
+                setLoading(false);
+                return;
+            }
+
+            // Step 2: Update password if current password is verified
             const { error } = await supabase.auth.updateUser({ password: newPassword });
 
             if (error) {
@@ -167,8 +262,10 @@ const ChangePasswordScreen = ({ navigation }) => {
                     [{ 
                         text: 'OK', 
                         onPress: () => {
-                            // Optional: Sign out after password change
-                            // supabase.auth.signOut();
+                            // Clear all password fields
+                            setCurrentPassword('');
+                            setNewPassword('');
+                            setConfirmPassword('');
                             navigation.goBack();
                         }
                     }]
@@ -216,7 +313,7 @@ const ChangePasswordScreen = ({ navigation }) => {
                 <View style={styles.formContainer}>
                     <CustomTextInput
                         label="Current Password"
-                        placeholder=""
+                        placeholder="Enter your current password"
                         value={currentPassword}
                         onChangeText={setCurrentPassword}
                         secureTextEntry={!showCurrentPassword}
@@ -225,7 +322,7 @@ const ChangePasswordScreen = ({ navigation }) => {
 
                     <CustomTextInput
                         label="New Password"
-                        placeholder="Enter a password"
+                        placeholder="Enter a strong new password"
                         value={newPassword}
                         onChangeText={setNewPassword}
                         secureTextEntry={!showNewPassword}
@@ -252,7 +349,7 @@ const ChangePasswordScreen = ({ navigation }) => {
                     
                     <CustomTextInput
                         label="Confirm New Password"
-                        placeholder=""
+                        placeholder="Re-enter your new password"
                         value={confirmPassword}
                         onChangeText={setConfirmPassword}
                         secureTextEntry={!showConfirmPassword}
@@ -284,6 +381,7 @@ const ChangePasswordScreen = ({ navigation }) => {
                 <TouchableOpacity 
                     style={styles.cancelButton}
                     onPress={() => navigation.goBack()}
+                    disabled={loading}
                 >
                     <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>

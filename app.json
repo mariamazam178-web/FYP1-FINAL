@@ -17,7 +17,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to update your profile information.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to update your profile information."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +29,11 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.mariam_azam.askend"
+      "package": "com.mariam_azam.askend",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -34,6 +42,9 @@
       "eas": {
         "projectId": "55c31ddb-8c3a-4342-a024-1494753c4fc1"
       }
-    }
+    },
+    "plugins": [
+      "expo-location"
+    ]
   }
 }
