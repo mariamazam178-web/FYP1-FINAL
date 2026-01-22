@@ -1,10 +1,7 @@
 // config.js
 
-// ============================================
-// 🔐 SUPABASE CONFIGURATION
-// ============================================
 
-// ⚠️ IMPORTANT: Your Supabase project credentials
+//  Supabase project credentials
 export const SUPABASE_URL = 'https://oyavjqycsjfcnzlshdsu.supabase.co'; 
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95YXZqcXljc2pmY256bHNoZHN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxNTgwMjcsImV4cCI6MjA3NTczNDAyN30.22cwyIWSBmhLefCvobdbH42cPSTnw_NmSwbwaYvyLy4';
 

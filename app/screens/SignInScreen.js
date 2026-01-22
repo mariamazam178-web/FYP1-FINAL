@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
     StyleSheet,
     View,
@@ -20,7 +20,6 @@ import AskendLogo from "../../assets/images/logo.png";
 import { supabase } from '../../supabaseClient'; 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../../config'; 
 
-const GET_USER_API_ENDPOINT = `${SUPABASE_URL}/auth/v1/user`; 
 const LOGIN_API_ENDPOINT = `${SUPABASE_URL}/auth/v1/token?grant_type=password`;
 
 const SignInScreen = ({ navigation }) => {
@@ -28,16 +27,38 @@ const SignInScreen = ({ navigation }) => {
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false); 
     const [isVerifyingLink, setIsVerifyingLink] = useState(false); 
+    const [isCheckingDeepLink, setIsCheckingDeepLink] = useState(true); 
     const [isManualLoading, setIsManualLoading] = useState(false);
-    const [keepLoggedIn, setKeepLoggedIn] = useState(false);
+    
+    const isMounted = useRef(true);
 
-    // Deep Link Verification
+    // Deep Link Verification - OPTIMIZED
     useEffect(() => {
+        isMounted.current = true;
+        
         const handleDeepLinkVerification = async () => {
-            setIsVerifyingLink(true);
-            const initialUrl = await Linking.getInitialURL();
+            try {
+                // ✅ NO DELAY - Check immediately
+                if (!isMounted.current) return;
+                
+                const initialUrl = await Linking.getInitialURL();
+                
+                if (!initialUrl) {
+                    // ✅ No deep link - IMMEDIATELY show login
+                    if (isMounted.current) {
+                        setIsVerifyingLink(false);
+                        setIsCheckingDeepLink(false);
+                    }
+                    return;
+                }
 
-            if (initialUrl) {
+                console.log("Deep link detected:", initialUrl);
+                
+                // ✅ Only set to true if we actually have a link
+                if (isMounted.current) {
+                    setIsVerifyingLink(true);
+                }
+                
                 const url = new URL(initialUrl);
                 const accessToken = url.searchParams.get('access_token');
                 const refreshToken = url.searchParams.get('refresh_token');
@@ -45,60 +66,75 @@ const SignInScreen = ({ navigation }) => {
 
                 if (accessToken && (type === 'signup' || type === 'recovery')) { 
                     try {
-                        const { data: sessionData, error: setSessionError } = await supabase.auth.setSession({
-                            access_token: accessToken,
-                            refresh_token: refreshToken,
-                        });
+                        console.log("Processing link type:", type);
                         
-                        if (setSessionError) {
-                            console.error("Deep Link Set Session Failed:", setSessionError.message);
-                            Alert.alert("Error", "Session verification failed. Please try the link again.");
-                            setIsVerifyingLink(false);
-                            return;
-                        } 
-                        
-                        await AsyncStorage.setItem('@supabase_session', JSON.stringify(sessionData.session));
-                        
+                        // ONLY FOR PASSWORD RESET
                         if (type === 'recovery') {
-                            Alert.alert("Password Reset", "Please set your new password now.");
-                            navigation.replace('PasswordUpdateScreen', {
-                                accessToken: accessToken, 
-                                refreshToken: refreshToken,
-                            });
-                            setIsVerifyingLink(false);
-                            return;
-                        }
-
-                        const { data: userData, error: userError } = await supabase.auth.getUser();
-
-                        if (userError || !userData || !userData.user) {
-                            console.error("User fetch error after signup:", userError);
-                            setIsVerifyingLink(false);
-                            return;
-                        }
-                        
-                        const userRole = userData.user.user_metadata?.user_role; 
-                        
-                        if (userRole) {
-                            navigation.replace(
-                                userRole === 'creator' ? 'CreatorDashboard' : 'FillerDashboard'
-                            );
+                            console.log("Password reset link detected");
+                            if (isMounted.current) {
+                                Alert.alert(
+                                    "Password Reset", 
+                                    "Please set your new password now."
+                                );
+                                setIsVerifyingLink(false);
+                                setIsCheckingDeepLink(false);
+                                navigation.replace('PasswordUpdateScreen', {
+                                    accessToken: accessToken, 
+                                    refreshToken: refreshToken,
+                                });
+                            }
                             return;
                         }
                         
-                        navigation.replace('ProfileCompletionScreen');
-                         return;
-
+                        // FOR SIGNUP VERIFICATION
+                        if (type === 'signup') {
+                            console.log("Email verification successful");
+                            if (isMounted.current) {
+                                Alert.alert(
+                                    "Email Verified!", 
+                                    "Your email has been successfully verified. Please log in to continue.",
+                                    [
+                                        {
+                                            text: "OK",
+                                            onPress: () => {
+                                                setIsVerifyingLink(false);
+                                                setIsCheckingDeepLink(false);
+                                            }
+                                        }
+                                    ]
+                                );
+                            }
+                            return;
+                        }
+                        
                     } catch (error) {
                         console.error("Deep Link Error:", error);
+                        if (isMounted.current) {
+                            Alert.alert("Error", "Failed to process the link.");
+                            setIsVerifyingLink(false);
+                            setIsCheckingDeepLink(false);
+                        }
                     }
-                } 
+                } else {
+                    // Not a verification link
+                    console.log("Not a verification link or missing token");
+                    if (isMounted.current) {
+                        setIsVerifyingLink(false);
+                        setIsCheckingDeepLink(false);
+                    }
+                }
+            } catch (error) {
+                console.error("Deep Link Check Error:", error);
+                if (isMounted.current) {
+                    setIsVerifyingLink(false);
+                    setIsCheckingDeepLink(false);
+                }
             }
-            setIsVerifyingLink(false);
         };
         
         const subscription = Linking.addEventListener('url', ({ url }) => {
-            if (url) {
+            if (url && isMounted.current) {
+                console.log("URL event received:", url);
                 handleDeepLinkVerification();
             }
         });
@@ -106,6 +142,7 @@ const SignInScreen = ({ navigation }) => {
         handleDeepLinkVerification();
         
         return () => {
+            isMounted.current = false;
             subscription.remove();
         };
 
@@ -188,13 +225,24 @@ const SignInScreen = ({ navigation }) => {
         setIsManualLoading(false);
     }
 
-    const isLoading = isManualLoading || isVerifyingLink;
+    const isLoading = isManualLoading; // Only manual loading affects inputs
 
+    // Show "Verifying..." ONLY if we're actually verifying a link
     if (isVerifyingLink) {
         return (
             <View style={[styles.container, styles.loadingOverlay]}>
                 <ActivityIndicator size="large" color="#FF8C00" />
                 <Text style={styles.loadingText}>Verifying secure link...</Text>
+            </View>
+        );
+    }
+
+    // Show brief splash ONLY during initial check (0.1 second max)
+    if (isCheckingDeepLink) {
+        return (
+            <View style={[styles.container, styles.loadingOverlay]}>
+                <ActivityIndicator size="large" color="#FF8C00" />
+                <Text style={styles.loadingText}>Loading...</Text>
             </View>
         );
     }
@@ -229,7 +277,8 @@ const SignInScreen = ({ navigation }) => {
                     keyboardType="email-address"
                     value={email}
                     onChangeText={setEmail}
-                    editable={!isLoading}
+                    selectTextOnFocus={true}
+                    autoFocus={false}
                 />
 
                 <View style={styles.passwordWrapper}>
@@ -240,12 +289,11 @@ const SignInScreen = ({ navigation }) => {
                         secureTextEntry={!showPassword}
                         value={password}
                         onChangeText={setPassword}
-                        editable={!isLoading}
+                        selectTextOnFocus={true}
                     />
                     <TouchableOpacity
                         style={styles.eyeIcon}
                         onPress={() => setShowPassword(!showPassword)}
-                        disabled={isLoading}
                     >
                         <Ionicons 
                             name={showPassword ? "eye" : "eye-off"} 
@@ -256,22 +304,8 @@ const SignInScreen = ({ navigation }) => {
                 </View>
 
                 <View style={styles.row}>
-                    <TouchableOpacity
-                        style={styles.checkboxContainer}
-                        onPress={() => setKeepLoggedIn(!keepLoggedIn)}
-                        disabled={isLoading}
-                    >
-                        {/* <View
-                            style={[styles.checkbox, keepLoggedIn && styles.checkboxActive]}
-                        >
-                            {keepLoggedIn && <Text style={styles.checkmark}>✓</Text>}
-                        </View>
-                        <Text style={styles.checkboxLabel}>Keep me logged in</Text> */}
-                    </TouchableOpacity>
-
                     <TouchableOpacity 
                         onPress={() => navigation.navigate('ForgotPasswordScreen')} 
-                        disabled={isLoading}
                     >
                         <Text style={styles.forgotPassword}>Forgot Password?</Text>
                     </TouchableOpacity>
@@ -298,7 +332,6 @@ const SignInScreen = ({ navigation }) => {
                     <Text style={styles.signupText}>Don't have an account?</Text>
                     <TouchableOpacity
                         onPress={() => navigation.navigate("RoleSelection")}
-                        disabled={isLoading}
                     >
                         <Text style={styles.signupLink}> Sign up</Text>
                     </TouchableOpacity>
@@ -431,37 +464,9 @@ input: {
 },
 row: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
     marginBottom: 15, 
-},
-checkboxContainer: { 
-    flexDirection: "row", 
-    alignItems: "center" 
-},
-checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 4,
-    marginRight: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
-},
-checkboxActive: { 
-    backgroundColor: "#FF8C00", 
-    borderColor: "#FF8C00" 
-},
-checkmark: { 
-    color: "#fff", 
-    fontSize: 14, 
-    fontWeight: "bold" 
-},
-checkboxLabel: { 
-    fontSize: 14, 
-    color: "#666" 
 },
 forgotPassword: { 
     fontSize: 14, 
